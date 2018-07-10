@@ -1,0 +1,116 @@
+#! /bin/bash
+#
+#  bash is used for simplicity.  Any language will do,
+#  use whatever you feel is best suited to the problem.
+#
+#  if you choose bash, remember that any system that
+#  supports inotify/gidget will also have the highly
+#  efficient double-bracket and double-parentheses
+#  syntaxes available for if/else testing.  Those
+#  methods are preferable when available but do not
+#  necessarily work on older systems.  I have used
+#  the older portable syntax below, and made other
+#  questionable choices in order to provide strong
+#  examples.
+#
+#  --Charlie Brooks 2011
+#
+#
+#  We should get passed a file name or the string UC4
+#
+#
+if [ "x$1" == "x" ] ; then
+    echo No file or command. Confused, exiting.
+    exit 1
+fi
+#
+#  do all the work in the folder where the file
+#  we are processing was found.  This is actually a
+#  really bad idea since that folder is almost
+#  certainly being watched by gidget - we are going
+#  to generate event traffic and will have to code
+#  very carefully to avoid a resource destroying
+#  infinite loop!  I did it this way for demonstration
+#  purposes only, do not do this in production code.
+#
+workFolder=`dirname "$1"`
+if test ! -d "$workFolder" ; then
+    echo Folder $workFolder does not exist.  Unable to continue.
+    echo File $1 will not be processed!
+    exit 1
+fi
+#
+# prevent md5 recursion from eating entire filesystem
+#
+if [ "${1##*\.}" == "md5" ] ; then
+    echo MD5 file.  Exiting.
+    exit 0
+fi
+#
+#  Race conditions are always a serious threat on
+#  modern multiprocessor systems with redundant
+#  disk storage, and naive mutex mechanisms that
+#  assume nothing can happen between testing for
+#  a flag and creating a flag will always fail.
+#
+set -o noclobber
+(md5sum "$1" >"$1.md5" ) 2>/dev/null 1>&2
+MDSTATUS=$?
+set +o noclobber
+
+if [ "$MDSTATUS" != "0" ]  ; then
+    if test -e "$1.md5" ; then
+        if md5sum "$1" | diff -a -q - -- "$1.md5" ; then
+            echo $1 has already been processed!
+            exit 0
+        else
+            echo WARNING! $1 does not match $1.md5!
+            echo Duplicate file name without duplicate data
+            echo unable to proceed!
+        fi
+    else
+      echo error $MDSTATUS
+      echo Unable to create $1.md5
+      echo process aborting!
+    fi
+    exit 2
+# in a real gidget proc, comment out the next 4 lines
+else
+    echo built $1.md5 for transfer integrity checking
+    echo hospital can use this for HIPAA assurance
+    echo and we can use it for dupe checking
+fi
+#
+#  do appropriate processing for all files we know about
+#  Note that in a real gidget proc, success generates no
+#  output.  You only write output if you want an error
+#  email to be generated.
+
+case $1 in
+
+  recon.20??-??-??.txt)
+      echo "Reconcilitation file.  Kicking off UC4 recon job!"
+      ;;
+
+  cash.20??-??-??.txt)
+      echo "Cash file.  Kicking off UC4 cash job!"
+      ;;
+
+
+  nubiz.20??-??-??.txt)
+      echo "New Business file.  Kicking off UC4 nubus job!"
+      ;;
+
+
+  legal.20??-??-??.txt)
+      echo "legal file.  Kicking off UC4 legal job!"
+      ;;
+
+  *)
+      echo "Unrecognized file $1 - alerting operations!"
+      echo mail mail mail mail
+      ;;
+
+esac
+
+exit 0

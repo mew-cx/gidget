@@ -1,0 +1,8 @@
+/var/log/gidget {
+    missingok
+    notifempty
+    create 640 root IS
+    postrotate
+        /bin/kill -HUP `cat /var/run/gidget.pid 2> /dev/null` 2> /dev/null || true
+    endscript
+}

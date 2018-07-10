@@ -1,0 +1,105 @@
+#!/bin/sh
+#
+# gidget: monitor files using inotify 
+#
+# chkconfig:	- 26 89
+# description: Uses inotify to monitor files and perform actions.	
+#
+# processname: gidget
+# config: /etc/gidget.conf
+#
+
+pidfile=/var/run/gidget.pid
+logfile=/var/log/gidget
+exefile=/usr/local/bin/gidget
+options="-d"
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+checklog() { 
+	if [ ! -e /etc/logrotate.d/gidget ] ; then
+	    echo "WARNING!  You have not set up logrotate for gidget"
+	    echo "gidget's log file, $logfile, can get extremely large!"
+	    if [ -s $logfile ] ; then
+		logsize=$(stat -c%s "$logfile")
+		echo "right now it is $logsize bytes."
+	    fi
+	fi
+}
+
+start() {
+	if [ -e "$pidfile" ] ; then
+	    StalePID=`cat $pidfile`
+	    if (kill -0 $StalePID 2>/dev/null) ; then
+		echo "Gidget is already running."
+	    else
+		echo "Gidget is dead, but pidfile $pidfile exists"
+	    fi
+	else
+	    echo -n $"Starting gidget: "
+	    daemon $exefile $options
+	    checklog
+	fi
+	echo
+}
+
+stop() {
+	if [ -e "$pidfile" ] ; then
+	    echo -n $"Shutting down gidget: "
+	    killproc -p $pidfile gidget
+	else
+	    echo -n "gidget is not running, or was not started by init"
+	fi
+	echo
+}
+
+# in order to prevent event loss, we have to start
+# a new gidget before we can shut down the old one
+# this adds a wrinkle to the pid tracking... we
+# can't shut down by process name because there
+# may be end-user gidgets running too
+
+overlap() {
+	if [ -e "$pidfile" ] ; then
+            echo gidget [initscript]: `date +'%Y-%M-%d %T'` Overlapping restart triggered >>$logfile
+	    mv $pidfile ${pidfile}.reloading
+	    echo -n $"Starting new instance of gidget: "
+	    daemon $exefile $options 
+	    echo
+	    echo -n $"Shutting down old instance of gidget: "
+	    killproc -p ${pidfile}.reloading gidget
+	    echo
+	    checklog
+        else
+            echo no system gidget
+# should add a ps parse for ppid 1 name gidget at some point
+	fi
+}
+
+# See how we were called.
+case "$1" in
+  start)
+	start
+	;;
+  stop)
+	stop
+	;;
+  restart|reload)
+	overlap
+	;;
+  condrestart)
+	[ -e $pidfile ] && overlap
+	;;
+  status)
+  	status -p $pidfile gidget
+	;;
+  checklog)
+	checklog
+	;;
+  *)
+	echo $"Usage: $0 {start|stop|restart|reload|condrestart}"
+	exit 1
+esac
+
+exit 0
